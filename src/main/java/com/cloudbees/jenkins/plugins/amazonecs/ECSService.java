@@ -28,6 +28,7 @@ package com.cloudbees.jenkins.plugins.amazonecs;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -74,6 +75,11 @@ import hudson.slaves.SlaveComputer;
  */
 public class ECSService {
     private static final Logger LOGGER = Logger.getLogger(ECSCloud.class.getName());
+
+    // Expected tags on running resources
+    private static final Tag tagBuildURL = new Tag().withKey("jenkins-build-url").withValue(System.getenv("BUILD_URL"));
+    private static final Tag tagJobID = new Tag().withKey("jenkins-job-id").withValue(System.getenv("JOB_NAME"));
+    private static final List<Tag> tags = Arrays.asList(new Tag[]{ tagBuildURL, tagJobID });
 
     @Nonnull
     private final Supplier<AmazonECS> clientSupplier;
@@ -322,6 +328,7 @@ public class ECSService {
         } else {
             final RegisterTaskDefinitionRequest request = new RegisterTaskDefinitionRequest()
                     .withFamily(familyName)
+                    .withTags(tags)
                     .withVolumes(template.getVolumeEntries())
                     .withContainerDefinitions(def);
 
@@ -437,6 +444,7 @@ public class ECSService {
 
         LOGGER.log(Level.FINE, "Found container definition with {0} container(s). Assuming first container is the Jenkins agent: {1}", new Object[]{taskDefinition.getContainerDefinitions().size(), agentContainerName});
 
+
         RunTaskRequest req = new RunTaskRequest()
                 .withTaskDefinition(taskDefinition.getTaskDefinitionArn())
                 .withOverrides(new TaskOverride()
@@ -446,6 +454,8 @@ public class ECSService {
                                 .withEnvironment(envNodeName)
                                 .withEnvironment(envNodeSecret)))
                 .withPlacementStrategy(template.getPlacementStrategyEntries())
+                .withPropagateTags(PropagateTags.TASK_DEFINITION)
+                .withTags(tags)
                 .withCluster(clusterArn);
         if ( ! template.getDefaultCapacityProvider() && template.getCapacityProviderStrategies() == null ) {
             req.withLaunchType(LaunchType.fromValue(template.getLaunchType()));
